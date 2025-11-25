@@ -84,7 +84,7 @@ module axi_s_to_fifos #(
     } state_read;
     state_read state_r;
 
-    // READ CHANNEL AND FIFO WRITE CHANNEL
+    // AXI READ CHANNEL AND FIFO WRITE CHANNEL
     always_ff @(posedge clk or negedge rst) begin
         if (!rst) begin
             arready             <= 0;
@@ -155,8 +155,8 @@ module axi_s_to_fifos #(
     end
 
     always_comb begin
-        pop_fifo1 = (fifo_wena && !full1);
-        push_fifo1 = (araddr_reg[31:ADDR_LSB] == ADDR_READ && !empty1) && 
+        push_fifo1 = (fifo_wena && !full1);
+        pop_fifo1 = (araddr_reg[31:ADDR_LSB] == ADDR_READ && !empty1) && 
                 (state_r == READ_DATA) && (rready && rvalid);
     end
 
@@ -164,7 +164,7 @@ module axi_s_to_fifos #(
         if (!rst) begin
             size_fifo1 <= FIFO_DEPTH;
         end else begin
-            size_fifo1 <= size_fifo1 + push_fifo1 - pop_fifo1;
+            size_fifo1 <= size_fifo1 + pop_fifo1 - push_fifo1;
         end
     end
 
@@ -177,7 +177,7 @@ module axi_s_to_fifos #(
     state_write state_w;
 
 
-    // WRITE CHANNEL AND FIFO READ CHANNEL
+    // AXI WRITE CHANNEL AND FIFO READ CHANNEL
     always_ff @(posedge clk or negedge rst) begin
         if (!rst) begin
             awready         <= 0;
@@ -271,15 +271,15 @@ module axi_s_to_fifos #(
     end
 
     always_comb begin
-        push_fifo2 = (fifo_rena && !empty2);
-        pop_fifo2 = (awaddr_reg[31:ADDR_LSB] == ADDR_WRITE && !wrote_axi && !full2) && (state_w == RESP);
+        pop_fifo2 = (fifo_rena && !empty2);
+        push_fifo2 = (awaddr_reg[31:ADDR_LSB] == ADDR_WRITE && !wrote_axi && !full2) && (state_w == RESP);
     end
 
     always_ff @(posedge clk or negedge rst) begin
         if (!rst) begin
             size_fifo2 <= FIFO_DEPTH;
         end else begin
-            size_fifo2 <= size_fifo2 + push_fifo2 - pop_fifo2;
+            size_fifo2 <= size_fifo2 + pop_fifo2 - push_fifo2;
         end
     end
 

@@ -119,8 +119,26 @@ module tb_axi_s_to_fifos;
         cov_almost_full1: cover (1);
     endtask
 
+    task automatic check_status_consistency();
+        logic [31:0] temp;
+        bit full2, almost_full2, empty1, almost_empty1;
+
+        master.read(temp, ADDR_STATUS * 4);
+        full2         = temp[3];
+        almost_full2  = temp[2];
+        empty1        = temp[1];
+        almost_empty1 = temp[0];
+
+        assert (!(full2 && almost_full2))
+            else $error("STATUS inconsistente: full2 && almost_full2");
+
+        assert (!(empty1 && almost_empty1))
+            else $error("STATUS inconsistente: empty1 && almost_empty1");
+    endtask
+
     task check_size(int size, logic n_fifo);
 
+        check_status_consistency();
         if (n_fifo) begin
             case (size)
                 0: full_fifo();
@@ -208,49 +226,103 @@ module tb_axi_s_to_fifos;
         end
     endtask
 
-    task test_extreme_case_fifo_1();
-        // write full fifo 1
-        // normal write to full fifo
+    task automatic test_reset();
+        for (int i = 0; i < FIFO_DEPTH; i++) begin
+            master.write(i, ADDR_WRITE * 4, 4'hF);
+            fifo.write_fifo(i);
+        end
+        @(posedge axi_if.clk);
+
+        test_full_size_fifo1: assert (dut.size_fifo1 == 0)
+            else $error("Assertion test_full_size_fifo1 failed! %0d", dut.size_fifo1);
+
+        test_full_size_fifo2: assert (dut.size_fifo2 == 0)
+            else $error("Assertion test_full_size_fifo2 failed! %0d", dut.size_fifo2);
+
+        @(posedge axi_if.clk);
+        axi_if.rst = 0;
+        @(posedge axi_if.clk);
+        axi_if.rst = 1;
+        @(posedge axi_if.clk);
+
+        test_reset_size_fifo1: assert (dut.size_fifo1 == FIFO_DEPTH)
+            else $error("Assertion test_reset_size_fifo1 failed! %0d", dut.size_fifo1);
+
+        test_reset_size_fifo2: assert (dut.size_fifo2 == FIFO_DEPTH)
+            else $error("Assertion test_reset_size_fifo2 failed! %0d", dut.size_fifo2);
+
+        empty_fifo();
+        empty_fifo_axi();
+
+    endtask
+
+    task automatic test_overfill_under_axi_fifo();
+        logic [31:0] temp_data;
+        logic [31:0] status;
+        int size_before, size_after;
+
         for (int i = 0; i < FIFO_DEPTH; i++) begin
             master.write(i, ADDR_WRITE * 4, 4'hF);
         end
-        // overfill fifo
+
+        size_before = dut.size_fifo2;
+        master.read(status, ADDR_STATUS * 4);
+        assert(status[3])
+            else $error("FIFO debería estar FULL tras %0d escrituras", FIFO_DEPTH);
+
         for (int i = 0; i < FIFO_DEPTH; i++) begin
             master.write(32'hDEADBEEF, ADDR_WRITE * 4, 4'hF);
+            master.read(status, ADDR_STATUS * 4);
+            assert(status[3])
+                else $error("FIFO dejó de estar FULL durante overfill AXI");
+            size_after = dut.size_fifo2;
+            assert (size_before == size_after)
+                else $error("FIFO debería estar FULL tras %0d escrituras", FIFO_DEPTH);
         end
-        // read empty fifo 1
-        // normal read from fifo
+
         for (int i = 0; i < FIFO_DEPTH; i++) begin
             fifo.read_fifo(temp_data);
             assert (temp_data == i)
-                else begin
-                    $error("Data mismatch AXI write to FIFO read at index %0d: sent %0d, received %0d"
-                        , i, i, temp_data);
-                end
+                else $error("Overfill AXI: esperaba %0d, leí %0d en posición %0d", 
+                            i, temp_data, i);
         end
-        // overread fifo
+
+        @(posedge axi_if.clk);
+        size_before = dut.size_fifo2;
         for (int i = 0; i < FIFO_DEPTH; i++) begin
             fifo.read_fifo(temp_data);
-            assert (temp_data == 0)
-                else begin
-                    $error("Data mismatch on overread FIFO at index %0d: expected %0d, received %0d"
-                        , i, 0, temp_data);
-                end
+            assert (temp_data == 0) else 
+                $error("Overread AXI: esperaba 0, leí %0d en posición %0d", temp_data, i);
+            assert(fifo.empty) else
+                $error("Tras sobreleer FIFO deberíamos seguir en estado vacío");
+            size_after = dut.size_fifo2;
+            assert (size_before == size_after)
+                else $error("Leer ADDR_READ en vacío no debería cambiar size_fifo2");
         end
     endtask
 
-    task test_extreme_case_fifo_2();
-        // write full fifo 2
-        // normal write to full fifo
+
+    task test_overfill_under_fifo_fifo();
+        logic [31:0] temp_data;
+        logic [31:0] status;
+        int size_before, size_after;
+
         for (int i = 0; i < FIFO_DEPTH; i++) begin
             fifo.write_fifo(i);
         end
-        // overfill fifo
+
+        @(posedge axi_if.clk);
+        assert(fifo.full) else $error("FIFO debería estar FULL tras escrituras %0d", FIFO_DEPTH);
+        size_before = dut.size_fifo1;
+
         for (int i = 0; i < FIFO_DEPTH; i++) begin
             fifo.write_fifo(32'hDEADBEEF);
+            assert(fifo.full) else $error("FIFO debería estar FULL tras escritura %0d", i);
+            size_after = dut.size_fifo1;
+            assert (size_before == size_after)
+                else $error("FIFO debería estar FULL tras %0d escrituras", FIFO_DEPTH);
         end
-        // read empty fifo 2
-        // normal read from fifo
+
         for (int i = 0; i < FIFO_DEPTH; i++) begin
             master.read(temp_data, ADDR_READ * 4);
             assert (temp_data == i)
@@ -259,7 +331,12 @@ module tb_axi_s_to_fifos;
                         , i, i, temp_data);
                 end
         end
-        // overread fifo
+
+        master.read(status, ADDR_STATUS * 4);
+        assert(status[1]) else
+            $error("Tras leer todo el FIFO, debería estar vacío");
+        size_before = dut.size_fifo1;
+
         for (int i = 0; i < FIFO_DEPTH; i++) begin
             master.read(temp_data, ADDR_READ * 4);
             assert (temp_data == 0)
@@ -267,17 +344,61 @@ module tb_axi_s_to_fifos;
                     $error("Data mismatch on overread FIFO at index %0d: expected %0d, received %0d"
                         , i, 0, temp_data);
                 end
+            master.read(status, ADDR_STATUS * 4);
+            assert(status[1]) else
+                $error("Tras leer todo el FIFO, debería estar vacío");
+
+            size_after = dut.size_fifo1;
+            assert (size_before == size_after)
+                else $error("Leer FIFO en vacío no debería cambiar size_fifo1");
         end
     endtask
 
-    // Clock generation 
+    localparam ADDR_INVALID0 = 3;
+    localparam ADDR_INVALID1 = 7;
+
+    task automatic test_invalid_addresses();
+        int size1_before, size1_after;
+        int size2_before, size2_after;
+        logic [31:0] d;
+
+        size1_before = dut.size_fifo1;
+        size2_before = dut.size_fifo2;
+
+        master.write(32'hAAAA_BBBB, ADDR_INVALID0 * 4, 4'hF);
+        master.write(32'hCCCC_DDDD, ADDR_INVALID1 * 4, 4'hF);
+
+        master.read(d, ADDR_INVALID0 * 4);
+        master.read(d, ADDR_INVALID1 * 4);
+
+        size1_after = dut.size_fifo1;
+        size2_after = dut.size_fifo2;
+
+        assert(size1_before == size1_after)
+            else $error("Acceso a direcciones inválidas ha modificado size_fifo1");
+        assert(size2_before == size2_after)
+            else $error("Acceso a direcciones inválidas ha modificado size_fifo2");
+
+        check_status_consistency();
+    endtask
+
+
+    // check size assertions
+    fifo1_size: assert property (@(posedge axi_if.clk) disable iff (!axi_if.rst)
+        (dut.size_fifo1 <= FIFO_DEPTH))
+        else $error("FIFO1 size exceeded depth");
+    fifo2_size: assert property (@(posedge axi_if.clk) disable iff (!axi_if.rst)
+        (dut.size_fifo2 <= FIFO_DEPTH))
+        else $error("FIFO2 size exceeded depth");
+
+    // Clock generation
     initial begin
         axi_if.clk = 0;
         forever #(t_clk/2) axi_if.clk = ~axi_if.clk;
     end
 
     // Reset generation and initialization
-    initial begin
+    task automatic init();
         axi_if.rst = 0;
         fifo.wena = 0;
         fifo.rena = 0;
@@ -288,7 +409,7 @@ module tb_axi_s_to_fifos;
         #100 @(posedge axi_if.clk);
         axi_if.rst = 1;
         @(posedge axi_if.clk);
-    end
+    endtask
 
     int remaining_axi_w  = NUM_TRANSFERS;
     int remaining_fifo_r = NUM_TRANSFERS;
@@ -309,7 +430,7 @@ module tb_axi_s_to_fifos;
     } test_state; test_state state;
 
     initial begin
-        @(posedge axi_if.rst);
+        init();
         @(posedge axi_if.clk);
 
         state = AXI_W_FIFO_R;
@@ -394,14 +515,19 @@ module tb_axi_s_to_fifos;
                 end
         end
 
-        state = FIFO_1_EXTREME;
-        test_extreme_case_fifo_1();
-        test_extreme_case_fifo_1();
-
         state = FIFO_2_EXTREME;
-        test_extreme_case_fifo_2();
-        test_extreme_case_fifo_2();
+        test_overfill_under_axi_fifo();
+        test_overfill_under_axi_fifo();
 
+        state = FIFO_1_EXTREME;
+        test_overfill_under_fifo_fifo();
+        test_overfill_under_fifo_fifo();
+
+        test_invalid_addresses();
+
+        test_reset();
+
+        $display("All tests passed.");
         $stop;
 
     end
