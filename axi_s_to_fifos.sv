@@ -3,7 +3,7 @@ module axi_s_to_fifos #(
     parameter integer C_DATA_WIDTH = 32
 )(
     input  logic                     clk,
-    input  logic                     rst,
+    input  logic                     nrst,
 
     // AXI4-Lite SLAVE
     input  logic [31:0]  awaddr,
@@ -85,8 +85,8 @@ module axi_s_to_fifos #(
     state_read state_r;
 
     // AXI READ CHANNEL AND FIFO WRITE CHANNEL
-    always_ff @(posedge clk or negedge rst) begin
-        if (!rst) begin
+    always_ff @(posedge clk or negedge nrst) begin
+        if (!nrst) begin
             arready             <= 0;
             araddr_reg          <= 0;
             rdata               <= 0;
@@ -139,8 +139,8 @@ module axi_s_to_fifos #(
         end
     end
 
-    always_ff @(posedge clk or negedge rst) begin
-        if (!rst) begin
+    always_ff @(posedge clk or negedge nrst) begin
+        if (!nrst) begin
             reg_read            <= '{default: '0};
             write_index_fifo    <= 0;
         end else begin
@@ -160,8 +160,8 @@ module axi_s_to_fifos #(
                 (state_r == READ_DATA) && (rready && rvalid);
     end
 
-    always_ff @(posedge clk or negedge rst) begin
-        if (!rst) begin
+    always_ff @(posedge clk or negedge nrst) begin
+        if (!nrst) begin
             size_fifo1 <= FIFO_DEPTH;
         end else begin
             size_fifo1 <= size_fifo1 + pop_fifo1 - push_fifo1;
@@ -178,8 +178,8 @@ module axi_s_to_fifos #(
 
 
     // AXI WRITE CHANNEL AND FIFO READ CHANNEL
-    always_ff @(posedge clk or negedge rst) begin
-        if (!rst) begin
+    always_ff @(posedge clk or negedge nrst) begin
+        if (!nrst) begin
             awready         <= 0;
             wready          <= 0;
             bvalid          <= 0;
@@ -257,8 +257,8 @@ module axi_s_to_fifos #(
         end
     end
 
-    always_ff @(posedge clk or negedge rst) begin
-        if (!rst) begin
+    always_ff @(posedge clk or negedge nrst) begin
+        if (!nrst) begin
             read_index_fifo <= 0;
         end else begin
             if (fifo_rena && !empty2) begin
@@ -275,8 +275,8 @@ module axi_s_to_fifos #(
         push_fifo2 = (awaddr_reg[31:ADDR_LSB] == ADDR_WRITE && !wrote_axi && !full2) && (state_w == RESP);
     end
 
-    always_ff @(posedge clk or negedge rst) begin
-        if (!rst) begin
+    always_ff @(posedge clk or negedge nrst) begin
+        if (!nrst) begin
             size_fifo2 <= FIFO_DEPTH;
         end else begin
             size_fifo2 <= size_fifo2 + pop_fifo2 - push_fifo2;

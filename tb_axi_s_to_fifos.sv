@@ -38,7 +38,7 @@ module tb_axi_s_to_fifos;
     
     // Conectar relojes y reset
     assign fifo.clk = axi_if.clk;
-    assign fifo.rst = axi_if.rst;
+    assign fifo.nrst = axi_if.nrst;
 
     axi_lite_master #(
         .DATA_WIDTH(DATA_WIDTH),
@@ -50,7 +50,7 @@ module tb_axi_s_to_fifos;
         .FIFO_DEPTH(FIFO_DEPTH)
     ) dut (
         .clk    (axi_if.clk),
-        .rst    (axi_if.rst),
+        .nrst    (axi_if.nrst),
 
         // AXI4-Lite SLAVE
         .awaddr (axi_if.awaddr),
@@ -240,9 +240,9 @@ module tb_axi_s_to_fifos;
             else $error("Assertion test_full_size_fifo2 failed! %0d", dut.size_fifo2);
 
         @(posedge axi_if.clk);
-        axi_if.rst = 0;
+        axi_if.nrst = 0;
         @(posedge axi_if.clk);
-        axi_if.rst = 1;
+        axi_if.nrst = 1;
         @(posedge axi_if.clk);
 
         test_reset_size_fifo1: assert (dut.size_fifo1 == FIFO_DEPTH)
@@ -384,10 +384,10 @@ module tb_axi_s_to_fifos;
 
 
     // check size assertions
-    fifo1_size: assert property (@(posedge axi_if.clk) disable iff (!axi_if.rst)
+    fifo1_size: assert property (@(posedge axi_if.clk) disable iff (!axi_if.nrst)
         (dut.size_fifo1 <= FIFO_DEPTH))
         else $error("FIFO1 size exceeded depth");
-    fifo2_size: assert property (@(posedge axi_if.clk) disable iff (!axi_if.rst)
+    fifo2_size: assert property (@(posedge axi_if.clk) disable iff (!axi_if.nrst)
         (dut.size_fifo2 <= FIFO_DEPTH))
         else $error("FIFO2 size exceeded depth");
 
@@ -399,7 +399,7 @@ module tb_axi_s_to_fifos;
 
     // Reset generation and initialization
     task automatic init();
-        axi_if.rst = 0;
+        axi_if.nrst = 0;
         fifo.wena = 0;
         fifo.rena = 0;
         fifo.wdata = 0;
@@ -407,7 +407,7 @@ module tb_axi_s_to_fifos;
         init_fifo_write();
         master = new(axi_if);
         #100 @(posedge axi_if.clk);
-        axi_if.rst = 1;
+        axi_if.nrst = 1;
         @(posedge axi_if.clk);
     endtask
 
