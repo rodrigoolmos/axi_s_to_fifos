@@ -406,6 +406,7 @@ module tb_axi_s_to_fifos;
         init_axi_write();
         init_fifo_write();
         master = new(axi_if);
+        master.reset_if();
         #100 @(posedge axi_if.clk);
         axi_if.nrst = 1;
         @(posedge axi_if.clk);
